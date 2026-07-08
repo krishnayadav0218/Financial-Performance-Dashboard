@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ledger — Financial Performance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#0E1420;
+    --panel:#141B2B;
+    --panel-2:#182036;
+    --rule:#2A3348;
+    --rule-strong:#3A445E;
+    --gold:#C9A227;
+    --gold-rgb:201,162,39;
+    --gold-soft:#8f7a3c;
+    --neg-rgb:208,106,98;
+    --header-rgb:14,20,32;
+    --text:#EDEFF4;
+    --muted:#8C93A6;
+    --faint:#5A6178;
+  }
+  html[data-theme="light"]{
+    --ink:#F6F5F1;
+    --panel:#FFFFFF;
+    --panel-2:#F0EEE7;
+    --rule:#DFDBD1;
+    --rule-strong:#C7C2B4;
+    --gold:#B8860B;
+    --gold-rgb:184,134,11;
+    --gold-soft:#8f7a3c;
+    --pos:#2F8F7D;
+    --neg:#B14840;
+    --pos-rgb:47,143,125;
+    --neg-rgb:177,72,64;
+    --header-rgb:246,245,241;
+    --text:#1B2130;
+    --muted:#6B7080;
+    --faint:#9A9587;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--ink);color:var(--text);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;transition:background .2s,color .2s;}
+  ::selection{background:var(--gold);color:#161616;}
+  .mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
+  .serif{font-family:'Fraunces',serif;}
+  a{color:inherit;}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 32px 80px;}
+
+  header.top{
+    border-bottom:1px solid var(--rule);padding:22px 0;
+    display:flex;justify-content:space-between;align-items:center;
+    position:sticky;top:0;background:rgba(var(--header-rgb),0.92);backdrop-filter:blur(6px);z-index:20;
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-family:'Fraunces',serif;font-size:19px;font-weight:600;letter-spacing:.2px;}
+  .brand .mark{width:9px;height:9px;background:var(--gold);border-radius:1px;transform:rotate(45deg);display:inline-block;}
+  .top-right{display:flex;align-items:center;gap:16px;}
+  .source-tag{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);border:1px solid var(--rule);padding:6px 10px;border-radius:6px;white-space:nowrap;}
+  .source-tag .dot{width:6px;height:6px;border-radius:50%;background:var(--pos);display:inline-block;margin-right:6px;}
+  .btn{
+    background:var(--gold);color:#191204;border:none;font-family:'Inter',sans-serif;font-weight:600;
+    font-size:13px;padding:9px 16px;border-radius:7px;cursor:pointer;
+  }
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--rule-strong);font-weight:500;}
+  .btn:hover{filter:brightness(1.08);}
+
+  .hero{padding:56px 0 30px;}
+  .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-soft);margin-bottom:14px;}
+  .hero-grid{display:flex;justify-content:space-between;align-items:flex-end;gap:40px;flex-wrap:wrap;}
+  h1.headline{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(34px,4.6vw,54px);line-height:1.02;margin:0 0 8px;letter-spacing:-.01em;}
+  .hero-sub{color:var(--muted);font-size:15px;max-width:480px;line-height:1.5;}
+  .delta-chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:5px 10px;border-radius:20px;margin-top:14px;}
+  .delta-chip.pos{background:rgba(var(--pos-rgb),.12);color:var(--pos);}
+  .delta-chip.neg{background:rgba(var(--neg-rgb),.12);color:var(--neg);}
+  .delta-chip.neutral{background:var(--panel-2);color:var(--muted);}
+
+  .period-select{display:flex;gap:2px;background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:3px;}
+  .period-select button{background:transparent;border:0;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:8px 14px;border-radius:6px;cursor:pointer;transition:.15s;}
+  .period-select button.active{background:var(--gold);color:#191204;font-weight:600;}
+  .period-select button:not(.active):hover{color:var(--text);}
+
+  .statement{display:grid;grid-template-columns:repeat(3,1fr);border-top:2px solid var(--gold);margin-top:34px;}
+  .statement .col{padding:22px 26px;border-right:1px solid var(--rule);}
+  .statement .col:last-child{border-right:none;}
+  .statement .label{font-size:11.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint);margin-bottom:10px;}
+  .statement .figure{font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:500;display:flex;align-items:baseline;gap:8px;}
+  .statement .figure .sign{color:var(--faint);font-size:18px;}
+  .statement .sub{font-size:12.5px;color:var(--muted);margin-top:6px;}
+  .statement .col.profit .figure{color:var(--pos);}
+  .ledger-rows{margin-top:16px;border-top:1px dashed var(--rule);padding-top:10px;}
+  .ledger-rows .row{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;color:var(--muted);}
+  .ledger-rows .row .v{font-family:'IBM Plex Mono',monospace;color:var(--text);}
+
+  section{padding:44px 0;border-bottom:1px solid var(--rule);}
+  .section-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:22px;flex-wrap:wrap;gap:10px;}
+  .section-head h2{font-family:'Fraunces',serif;font-size:22px;font-weight:600;margin:0;}
+  .section-head .note{font-size:12.5px;color:var(--faint);}
+
+  .kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--rule);border:1px solid var(--rule);}
+  .kpi{background:var(--panel);padding:18px 16px;}
+  .kpi .k-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-bottom:10px;}
+  .kpi .k-val{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:500;}
+  .kpi .k-delta{font-size:11.5px;margin-top:6px;}
+  .kpi .k-delta.pos{color:var(--pos);}
+  .kpi .k-delta.neg{color:var(--neg);}
+  .kpi .k-delta.neutral{color:var(--muted);}
+
+  .charts-row{display:grid;grid-template-columns:1.6fr 1fr;gap:1px;background:var(--rule);border:1px solid var(--rule);}
+  .chart-card{background:var(--panel);padding:22px 24px;}
+  .chart-card h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:500;margin:0 0 16px;}
+  .chart-holder{position:relative;height:260px;}
+  .legend-row{display:flex;gap:18px;margin-top:14px;flex-wrap:wrap;}
+  .legend-row .li{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);}
+  .legend-row .dot{width:8px;height:8px;border-radius:2px;}
+
+  table.ledger{width:100%;border-collapse:collapse;font-size:13px;}
+  table.ledger thead th{text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);font-weight:500;padding:10px 14px;border-bottom:1px solid var(--rule-strong);}
+  table.ledger thead th:first-child{text-align:left;}
+  table.ledger tbody td{padding:10px 14px;text-align:right;font-family:'IBM Plex Mono',monospace;border-bottom:1px solid var(--rule);color:var(--text);}
+  table.ledger tbody td:first-child{text-align:left;font-family:'Inter',sans-serif;color:var(--muted);}
+  table.ledger tbody tr:hover{background:var(--panel-2);}
+  td.pos{color:var(--pos);}
+  td.neg{color:var(--neg);}
+
+  .method-tabs{display:flex;gap:0;border-bottom:1px solid var(--rule);}
+  .method-tabs button{background:none;border:none;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:10px 18px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
+  .method-tabs button.active{color:var(--gold);border-bottom-color:var(--gold);}
+  pre.code{background:#0A0F19;border:1px solid var(--rule);border-top:none;margin:0;padding:20px 22px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.7;color:#C7CCDA;overflow-x:auto;}
+  pre.code .c{color:var(--gold-soft);}
+  pre.code .k{color:#7AA2E3;}
+  .method-pane{display:none;}
+  .method-pane.active{display:block;}
+
+  footer{padding:30px 0 10px;font-size:12px;color:var(--faint);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+
+  /* ===== Modal ===== */
+  .overlay{position:fixed;inset:0;background:rgba(6,9,16,0.72);backdrop-filter:blur(3px);display:none;align-items:flex-start;justify-content:center;z-index:100;padding:60px 20px;}
+  .overlay.open{display:flex;}
+  .modal{background:var(--panel);border:1px solid var(--rule-strong);border-radius:10px;width:100%;max-width:640px;overflow:hidden;}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid var(--rule);}
+  .modal-head h3{font-family:'Fraunces',serif;font-size:18px;margin:0;font-weight:600;}
+  .modal-head button{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;}
+  .src-tabs{display:flex;border-bottom:1px solid var(--rule);}
+  .src-tabs button{flex:1;background:none;border:none;color:var(--muted);font-size:13px;padding:12px;cursor:pointer;border-bottom:2px solid transparent;}
+  .src-tabs button.active{color:var(--gold);border-bottom-color:var(--gold);background:var(--panel-2);}
+  .src-pane{display:none;padding:22px 24px;}
+  .src-pane.active{display:block;}
+  .src-pane p{font-size:13px;color:var(--muted);line-height:1.6;margin:0 0 14px;}
+  .drop{
+    display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;
+    border:1.5px dashed var(--rule-strong);border-radius:12px;padding:34px 20px;
+    background:var(--panel-2);cursor:pointer;transition:.18s border-color,.18s background,.18s transform;
+  }
+  .drop:hover{border-color:var(--gold-soft);background:rgba(var(--gold-rgb),.04);}
+  .drop.dragover{border-color:var(--gold);background:rgba(var(--gold-rgb),.08);transform:scale(1.01);}
+  .drop input{display:none;}
+  .drop .drop-icon{
+    width:42px;height:42px;border-radius:50%;background:var(--panel);border:1px solid var(--rule);
+    display:flex;align-items:center;justify-content:center;color:var(--muted);
+  }
+  .drop.dragover .drop-icon{color:var(--gold);border-color:var(--gold);}
+  .drop .drop-title{font-size:13.5px;font-weight:600;color:var(--text);}
+  .drop .drop-sub{font-size:12.5px;color:var(--muted);}
+  .drop .drop-sub .browse-link{color:var(--gold);text-decoration:underline;font-weight:500;}
+  .drop .drop-formats{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;color:var(--faint);text-transform:uppercase;margin-top:2px;}
+  .file-chip{
+    display:none;align-items:center;gap:10px;margin-top:12px;padding:10px 12px;
+    border:1px solid var(--rule);border-radius:8px;background:var(--panel-2);font-size:12.5px;
+  }
+  .file-chip.show{display:flex;}
+  .file-chip .fc-icon{
+    width:28px;height:28px;border-radius:6px;background:rgba(var(--pos-rgb),.15);color:var(--pos);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;
+  }
+  .file-chip .fc-name{flex:1;color:var(--text);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .file-chip .fc-meta{color:var(--faint);font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  .file-chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 4px;}
+  .file-chip button:hover{color:var(--neg);}
+  .schema-label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin:16px 0 6px;}
+  .schema-table{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:11.5px;border:1px solid var(--rule);border-radius:6px;overflow:hidden;}
+  .schema-table th{background:var(--panel-2);color:var(--faint);text-align:left;font-weight:500;padding:8px 10px;border-bottom:1px solid var(--rule);text-transform:uppercase;font-size:10px;letter-spacing:.05em;}
+  .schema-table td{padding:7px 10px;color:var(--muted);border-bottom:1px solid var(--rule);}
+  .schema-table tr:last-child td{border-bottom:none;}
+  .field-row{display:flex;gap:8px;margin-top:6px;}
+  .field-row input{
+    flex:1;background:var(--ink);border:1px solid var(--rule-strong);color:var(--text);
+    padding:10px 12px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;
+  }
+  .field-row input:focus{outline:none;border-color:var(--gold-soft);}
+  .msg{font-size:12.5px;margin-top:12px;padding:9px 12px;border-radius:6px;display:none;}
+  .msg.show{display:block;}
+  .msg.err{background:rgba(var(--neg-rgb),.12);color:var(--neg);}
+  .msg.ok{background:rgba(var(--pos-rgb),.12);color:var(--pos);}
+  .tmpl-link{font-size:12.5px;color:var(--gold);text-decoration:underline;cursor:pointer;}
+  .schema-box{background:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:12px;}
+
+  @media (max-width:900px){
+    .statement{grid-template-columns:1fr;}
+    .statement .col{border-right:none;border-bottom:1px solid var(--rule);}
+    .kpi-grid{grid-template-columns:repeat(2,1fr);}
+    .charts-row{grid-template-columns:1fr;}
+    .wrap{padding:0 18px 60px;}
+    .top-right{flex-direction:column;align-items:flex-end;gap:8px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap" style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+    <div class="brand"><span class="mark"></span>Ledger</div>
+    <div class="top-right">
+      <span class="source-tag" id="source-tag"><span class="dot"></span>Demo data</span>
+      <button class="btn ghost" id="theme-toggle">☀️ Light</button>
+      <button class="btn" id="open-modal-btn">Connect Data ↗</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero" style="border-bottom:none;padding-bottom:0;">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">Financial Performance</div>
+        <h1 class="headline">Revenue <span class="num mono" id="hero-revenue">$0</span></h1>
+        <div class="hero-sub">Consolidated view of revenue, cost, and margin across the business.</div>
+        <div class="delta-chip pos" id="hero-delta">▲ 0%</div>
+      </div>
+      <div class="period-select" id="period-select">
+        <button data-range="12">Full Range</button>
+        <button data-range="6">Last 6</button>
+        <button data-range="3">Last 3</button>
+      </div>
+    </div>
+
+    <div class="statement">
+      <div class="col revenue">
+        <div class="label">Revenue</div>
+        <div class="figure"><span class="sign">$</span><span id="st-revenue">0</span></div>
+        <div class="sub" id="rev-sub">Revenue streams</div>
+        <div class="ledger-rows" id="rev-rows"></div>
+      </div>
+      <div class="col expense">
+        <div class="label">Total Expenses</div>
+        <div class="figure"><span class="sign">$</span><span id="st-expense">0</span></div>
+        <div class="sub" id="exp-sub">Expense categories</div>
+        <div class="ledger-rows" id="exp-rows"></div>
+      </div>
+      <div class="col profit">
+        <div class="label">Net Profit</div>
+        <div class="figure"><span class="sign">$</span><span id="st-profit">0</span></div>
+        <div class="sub" id="margin-sub">Net margin —</div>
+        <div class="ledger-rows" id="profit-rows"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Key Performance Indicators</h2>
+      <div class="note">Recomputed live from the connected source</div>
+    </div>
+    <div class="kpi-grid" id="kpi-grid"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Trends</h2>
+      <div class="note">In USD, by period</div>
+    </div>
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>Revenue vs. Expenses vs. Profit</h3>
+        <div class="chart-holder"><canvas id="trendChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Expense Mix (selected range)</h3>
+        <div class="chart-holder"><canvas id="expenseDonut"></canvas></div>
+        <div class="legend-row" id="donut-legend"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Ledger Detail</h2>
+      <div class="note">Row per period behind the summary above</div>
+    </div>
+    <table class="ledger">
+      <thead><tr><th>Period</th><th>Revenue</th><th>Expenses</th><th>Gross Margin</th><th>Net Profit</th><th>Net Margin</th></tr></thead>
+      <tbody id="ledger-body"></tbody>
+    </table>
+  </section>
+
+  <section style="border-bottom:none;">
+    <div class="section-head">
+      <h2>Data & Methodology</h2>
+      <div class="note">Source model behind this dashboard</div>
+    </div>
+    <div class="method-tabs" id="method-tabs">
+      <button class="active" data-pane="sql">SQL — source extract</button>
+      <button data-pane="dax1">DAX — Net Margin %</button>
+      <button data-pane="dax2">DAX — YoY Growth</button>
+    </div>
+    <div class="method-pane active" id="pane-sql">
+<pre class="code"><span class="c">-- Shapes the fact table into the Month, Stream, Type, Amount format this dashboard reads</span>
+<span class="k">SELECT</span>
+    d.period_label  <span class="k">AS</span> month,
+    a.account_name  <span class="k">AS</span> stream,
+    a.account_type  <span class="k">AS</span> type,       <span class="c">-- 'revenue' or 'expense'</span>
+    <span class="k">SUM</span>(f.amount) <span class="k">AS</span> amount
+<span class="k">FROM</span> fact_transactions f
+<span class="k">JOIN</span> dim_date d     <span class="k">ON</span> f.date_key    = d.date_key
+<span class="k">JOIN</span> dim_account a  <span class="k">ON</span> f.account_key = a.account_key
+<span class="k">GROUP BY</span> d.period_label, a.account_name, a.account_type
+<span class="k">ORDER BY</span> d.date_key;</pre>
+    </div>
+    <div class="method-pane" id="pane-dax1">
+<pre class="code"><span class="c">// Net margin = net profit divided by total revenue for the current filter context</span>
+Net Margin % =
+<span class="k">DIVIDE</span>( [Net Profit], [Total Revenue], <span class="k">BLANK</span>() )</pre>
+    </div>
+    <div class="method-pane" id="pane-dax2">
+<pre class="code"><span class="c">// Compares revenue to the same period one year earlier using a date table</span>
+Revenue YoY % =
+<span class="k">VAR</span> CurrentRevenue = [Total Revenue]
+<span class="k">VAR</span> PriorRevenue =
+    <span class="k">CALCULATE</span>( [Total Revenue], <span class="k">SAMEPERIODLASTYEAR</span>( 'Dim Date'[Date] ) )
+<span class="k">RETURN</span>
+    <span class="k">DIVIDE</span>( CurrentRevenue - PriorRevenue, PriorRevenue, <span class="k">BLANK</span>() )</pre>
+    </div>
+  </section>
+
+  <footer>
+    <div>Ledger — financial performance dashboard</div>
+    <div id="footer-note">Showing illustrative demo data</div>
+  </footer>
+</div>
+
+<!-- ===== Data Source Modal ===== -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Connect a data source</h3>
+      <button id="close-modal">✕</button>
+    </div>
+    <div class="src-tabs" id="src-tabs">
+      <button class="active" data-src="file">Upload CSV / Excel / Power BI export</button>
+      <button data-src="api">Connect API (live SQL)</button>
+    </div>
+
+    <div class="src-pane active" id="src-file">
+      <p>Upload a CSV or Excel file. This also works with a <strong>Power BI "Export data"</strong> file straight off a table visual — just make sure the columns match the schema below (rename headers in Power BI or Excel if needed).</p>
+      <label class="drop" id="drop-zone">
+        <input type="file" id="file-input" accept=".csv,.xlsx,.xls">
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 15V3m0 0L7 8m5-5l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="drop-title">Drop your file here</div>
+        <div class="drop-sub">or <span class="browse-link">browse from your computer</span></div>
+        <div class="drop-formats">CSV · XLSX · XLS</div>
+      </label>
+      <div class="file-chip" id="file-chip">
+        <div class="fc-icon">✓</div>
+        <div class="fc-name" id="fc-name">—</div>
+        <div class="fc-meta" id="fc-meta"></div>
+        <button id="fc-remove" title="Remove file">✕</button>
+      </div>
+
+      <div class="schema-label">Expected columns</div>
+      <table class="schema-table">
+        <tr><th>Month</th><th>Stream</th><th>Type</th><th>Amount</th></tr>
+        <tr><td>Jan-26</td><td>Subscriptions</td><td>Revenue</td><td>150000</td></tr>
+        <tr><td>Jan-26</td><td>COGS</td><td>Expense</td><td>70000</td></tr>
+      </table>
+      <p style="margin-top:12px;"><span class="tmpl-link" id="download-template">Download a blank template CSV</span></p>
+      <div class="msg" id="file-msg"></div>
+    </div>
+
+    <div class="src-pane" id="src-api">
+      <p>Browsers can't connect to a SQL database directly — that would mean exposing your DB credentials to anyone visiting this page. Instead, point this at a small API endpoint that runs the query on your behalf and returns JSON in the schema below. A ready-to-deploy backend template (Node + Express + SQL) is included alongside this dashboard's files.</p>
+      <div class="field-row">
+        <input type="text" id="api-url" placeholder="https://your-backend.example.com/api/financials">
+        <button class="btn" id="connect-api-btn">Connect</button>
+      </div>
+      <div class="schema-box">[{ "month": "2026-01", "stream": "Subscriptions", "type": "revenue", "amount": 150000 }, ...]</div>
+      <div class="msg" id="api-msg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Data pipeline: everything downstream reads from `months`,
+   `revenueStreams`, `expenseCats`, and derived `monthly`.
+   Demo data, file upload, and API all funnel into buildDataset().
+   ============================================================ */
+
+let months = [];
+let revenueStreams = {};
+let expenseCats = {};
+let monthly = [];
+let rangeMonths = 12;
+
+function seeded(i, base, amp, noise){ return base + amp*Math.sin(i/2.1) + noise*(((i*37+11)%13)-6); }
+
+function demoRecords(){
+  const m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const rev = { Subscriptions: [], Services: [], Hardware: [] };
+  const exp = { COGS: [], Payroll: [], Marketing: [], "R&D": [], "G&A": [] };
+  for(let i=0;i<12;i++){
+    rev.Subscriptions.push(Math.round(seeded(i,150,18,3)+i*4));
+    rev.Services.push(Math.round(seeded(i,60,10,2)+i*1.4));
+    rev.Hardware.push(Math.round(seeded(i,35,12,4)));
+    exp.COGS.push(Math.round(seeded(i,70,8,2)+i*1.6));
+    exp.Payroll.push(Math.round(seeded(i,90,4,1)+i*1.1));
+    exp.Marketing.push(Math.round(seeded(i,28,9,3)));
+    exp["R&D"].push(Math.round(seeded(i,22,5,2)+i*0.6));
+    exp["G&A"].push(Math.round(seeded(i,16,3,1)));
+  }
+  const records = [];
+  m.forEach((month,i)=>{
+    Object.entries(rev).forEach(([stream,arr])=>records.push({month,stream,type:'revenue',amount:arr[i]}));
+    Object.entries(exp).forEach(([stream,arr])=>records.push({month,stream,type:'expense',amount:arr[i]}));
+  });
+  return records;
+}
+
+function normalizeHeader(h){ return String(h).trim().toLowerCase(); }
+
+function rowsToRecords(rawRows){
+  if(!rawRows || !rawRows.length) throw new Error('The file has no rows.');
+  const keys = Object.keys(rawRows[0]).map(k=>({orig:k, norm:normalizeHeader(k)}));
+  const monthKey  = keys.find(k=>/month|period|date/.test(k.norm));
+  const streamKey = keys.find(k=>/stream|category|account|item/.test(k.norm));
+  const typeKey   = keys.find(k=>/^type$|account.?type|class/.test(k.norm));
+  const amountKey = keys.find(k=>/amount|value|total|amt/.test(k.norm));
+  if(!monthKey || !typeKey || !amountKey){
+    throw new Error("Couldn't find Month, Type, and Amount columns. Expected headers like: Month, Stream, Type, Amount.");
+  }
+  return rawRows.map(r=>{
+    const rawType = String(r[typeKey.orig]).trim().toLowerCase();
+    return {
+      month: String(r[monthKey.orig]).trim(),
+      stream: streamKey ? String(r[streamKey.orig]).trim() : (rawType.startsWith('rev') ? 'Revenue' : 'Expense'),
+      type: rawType.startsWith('rev') ? 'revenue' : 'expense',
+      amount: parseFloat(String(r[amountKey.orig]).replace(/[,$]/g,'')) || 0
+    };
+  });
+}
+
+function buildDataset(records){
+  const monthOrder = [];
+  records.forEach(r=>{ if(!monthOrder.includes(r.month)) monthOrder.push(r.month); });
+  const rev = {}, exp = {};
+  records.forEach(r=>{
+    const target = r.type==='revenue' ? rev : exp;
+    if(!target[r.stream]) target[r.stream] = monthOrder.map(()=>0);
+    target[r.stream][monthOrder.indexOf(r.month)] += r.amount;
+  });
+  return { months: monthOrder, revenueStreams: rev, expenseCats: exp };
+}
+
+function sumStreamsAt(obj,i){ return Object.values(obj).reduce((s,arr)=>s+(arr[i]||0),0); }
+function getCOGSAt(expenseCats,i){
+  const key = Object.keys(expenseCats).find(k=>/cogs|cost of goods/i.test(k));
+  return key ? (expenseCats[key][i]||0) : 0;
+}
+
+function buildMonthly(){
+  monthly = months.map((m,i)=>{
+    const revenue = sumStreamsAt(revenueStreams,i);
+    const expense = sumStreamsAt(expenseCats,i);
+    const cogs = getCOGSAt(expenseCats,i);
+    const netProfit = revenue-expense;
+    return {
+      month:m, revenue, expense, cogs,
+      grossMargin: revenue ? (revenue-cogs)/revenue : 0,
+      netProfit,
+      netMargin: revenue ? netProfit/revenue : 0
+    };
+  });
+}
+
+function loadDataset(ds, sourceLabel, sourceKind){
+  months = ds.months; revenueStreams = ds.revenueStreams; expenseCats = ds.expenseCats;
+  buildMonthly();
+  rangeMonths = Math.min(rangeMonths, months.length) || months.length;
+  setSourceTag(sourceLabel, sourceKind);
+  renderAll();
+}
+
+function setSourceTag(label, kind){
+  const tag = document.getElementById('source-tag');
+  const colors = {demo:'var(--muted)', file:'var(--pos)', api:'var(--gold)'};
+  tag.innerHTML = `<span class="dot" style="background:${colors[kind]||'var(--pos)'}"></span>${label}`;
+  document.getElementById('footer-note').textContent = kind==='demo' ? 'Showing illustrative demo data' : 'Showing data from: '+label;
+}
+
+/* ============ Formatting ============ */
+const fmt$ = n => (n<0?'-':'') + Math.abs(Math.round(n)).toLocaleString('en-US');
+const fmtK = n => '$' + fmt$(n) + 'K';
+const fmtPct = n => (isFinite(n) ? (n*100).toFixed(1) : '0.0') + '%';
+
+function sliceRange(){
+  const start = Math.max(0, monthly.length - rangeMonths);
+  return { idx: monthly.map((_,i)=>i).slice(start), data: monthly.slice(start) };
+}
+
+function periodGrowth(data){
+  if(data.length<2) return null;
+  const mid = Math.floor(data.length/2);
+  const firstHalf = data.slice(0,mid).reduce((s,d)=>s+d.revenue,0)/mid;
+  const secondHalf = data.slice(mid).reduce((s,d)=>s+d.revenue,0)/(data.length-mid);
+  if(!firstHalf) return null;
+  return (secondHalf-firstHalf)/firstHalf;
+}
+
+/* ============ Render: statement + hero ============ */
+function renderStatement(){
+  const {idx,data} = sliceRange();
+  const totalRevenue = data.reduce((s,d)=>s+d.revenue,0);
+  const totalExpense = data.reduce((s,d)=>s+d.expense,0);
+  const netProfit = totalRevenue-totalExpense;
+
+  document.getElementById('hero-revenue').textContent = fmtK(totalRevenue);
+  document.getElementById('st-revenue').textContent = fmt$(totalRevenue)+'K';
+  document.getElementById('st-expense').textContent = fmt$(totalExpense)+'K';
+  document.getElementById('st-profit').textContent = fmt$(netProfit)+'K';
+  document.getElementById('margin-sub').textContent = 'Net margin ' + fmtPct(totalRevenue?netProfit/totalRevenue:0);
+
+  const growth = periodGrowth(data);
+  const chip = document.getElementById('hero-delta');
+  if(growth===null){
+    chip.textContent = 'Not enough periods for a trend'; chip.className='delta-chip neutral';
+  } else {
+    chip.textContent = (growth>=0?'▲ ':'▼ ') + fmtPct(Math.abs(growth)) + ' vs earlier in range';
+    chip.className = 'delta-chip ' + (growth>=0?'pos':'neg');
+  }
+
+  document.getElementById('rev-rows').innerHTML = Object.entries(revenueStreams).map(([name,arr])=>{
+    const val = idx.reduce((s,i)=>s+(arr[i]||0),0);
+    return `<div class="row"><span>${name}</span><span class="v">$${fmt$(val)}K</span></div>`;
+  }).join('');
+
+  document.getElementById('exp-rows').innerHTML = Object.entries(expenseCats).map(([name,arr])=>{
+    const val = idx.reduce((s,i)=>s+(arr[i]||0),0);
+    return `<div class="row"><span>${name}</span><span class="v">$${fmt$(val)}K</span></div>`;
+  }).join('');
+
+  const cogsTotal = idx.reduce((s,i)=>s+getCOGSAt(expenseCats,i),0);
+  const grossProfitTotal = totalRevenue - cogsTotal;
+  const opex = totalExpense - cogsTotal;
+  document.getElementById('profit-rows').innerHTML = `
+    <div class="row"><span>Gross profit</span><span class="v">$${fmt$(grossProfitTotal)}K</span></div>
+    <div class="row"><span>Operating expenses</span><span class="v">$${fmt$(opex)}K</span></div>
+    <div class="row"><span>Gross margin</span><span class="v">${fmtPct(totalRevenue?grossProfitTotal/totalRevenue:0)}</span></div>
+  `;
+}
+
+/* ============ Render: KPI grid ============ */
+function renderKpis(){
+  const {data} = sliceRange();
+  const totalRevenue = data.reduce((s,d)=>s+d.revenue,0);
+  const totalExpense = data.reduce((s,d)=>s+d.expense,0);
+  const netProfit = totalRevenue-totalExpense;
+  const cogsTotal = data.reduce((s,d)=>s+d.cogs,0);
+  const grossProfit = totalRevenue-cogsTotal;
+  const growth = periodGrowth(data);
+
+  const kpis = [
+    {label:'Gross Margin', val:fmtPct(totalRevenue?grossProfit/totalRevenue:0)},
+    {label:'Net Margin', val:fmtPct(totalRevenue?netProfit/totalRevenue:0)},
+    {label:'OpEx Ratio', val:fmtPct(totalRevenue?(totalExpense-cogsTotal)/totalRevenue:0)},
+    {label:'Revenue Trend', val: growth===null?'—':(growth>=0?'+':'')+fmtPct(growth), neutral: growth===null, pos: growth>=0},
+    {label:'Avg. Revenue / Period', val:fmtK(data.length?totalRevenue/data.length:0), neutral:true},
+    {label:'Net Result', val: netProfit>=0 ? 'Profitable' : 'Loss-making', pos:netProfit>=0, sub:fmtK(netProfit)}
+  ];
+
+  document.getElementById('kpi-grid').innerHTML = kpis.map(k=>`
+    <div class="kpi">
+      <div class="k-label">${k.label}</div>
+      <div class="k-val">${k.val}</div>
+      <div class="k-delta ${k.neutral?'neutral':(k.pos?'pos':'neg')}">${k.sub || (k.neutral?'':(k.pos?'▲ favorable':'▼ unfavorable'))}</div>
+    </div>
+  `).join('');
+}
+
+/* ============ Charts ============ */
+let trendChart, donutChart;
+const donutColors = ['#C9A227','#8FA5D6','#D06A62','#6FA98C','#8C93A6','#B98FD6','#5FB0C9'];
+
+function themeVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function renderCharts(){
+  const {idx,data} = sliceRange();
+  const labels = data.map(d=>d.month);
+  const gridColor = themeVar('--rule');
+  const tickColor = themeVar('--muted');
+  const goldColor = themeVar('--gold');
+  const negColor = themeVar('--neg');
+  const posColor = themeVar('--pos');
+  const posRgb = themeVar('--pos-rgb');
+  const panelColor = themeVar('--panel');
+
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  if(trendChart) trendChart.destroy();
+  trendChart = new Chart(ctx,{
+    type:'line',
+    data:{ labels, datasets:[
+      {label:'Revenue', data:data.map(d=>d.revenue), borderColor:goldColor, backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2.5},
+      {label:'Expenses', data:data.map(d=>d.expense), borderColor:negColor, backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2},
+      {label:'Net Profit', data:data.map(d=>d.netProfit), borderColor:posColor, backgroundColor:`rgba(${posRgb},0.08)`, fill:true, tension:.35, pointRadius:0, borderWidth:2}
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{grid:{color:gridColor}, ticks:{color:tickColor, font:{family:'IBM Plex Mono', size:11}}},
+               y:{grid:{color:gridColor}, ticks:{color:tickColor, font:{family:'IBM Plex Mono', size:11}, callback:v=>'$'+v+'K'}} } }
+  });
+
+  const expTotals = Object.entries(expenseCats).map(([name,arr])=>[name, idx.reduce((s,i)=>s+(arr[i]||0),0)]);
+  const dctx = document.getElementById('expenseDonut').getContext('2d');
+  if(donutChart) donutChart.destroy();
+  donutChart = new Chart(dctx,{
+    type:'doughnut',
+    data:{ labels: expTotals.map(e=>e[0]), datasets:[{data: expTotals.map(e=>e[1]), backgroundColor: donutColors, borderColor:panelColor, borderWidth:2}] },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'68%', plugins:{legend:{display:false}} }
+  });
+  document.getElementById('donut-legend').innerHTML = expTotals.map((e,i)=>`
+    <div class="li"><span class="dot" style="background:${donutColors[i%donutColors.length]}"></span>${e[0]} — $${fmt$(e[1])}K</div>
+  `).join('');
+}
+
+/* ============ Ledger table ============ */
+function renderTable(){
+  const {data} = sliceRange();
+  document.getElementById('ledger-body').innerHTML = data.map(d=>`
+    <tr>
+      <td>${d.month}</td>
+      <td>$${fmt$(d.revenue)}K</td>
+      <td>$${fmt$(d.expense)}K</td>
+      <td>${fmtPct(d.grossMargin)}</td>
+      <td class="${d.netProfit>=0?'pos':'neg'}">${d.netProfit>=0?'':'-'}$${fmt$(Math.abs(d.netProfit))}K</td>
+      <td class="${d.netMargin>=0?'pos':'neg'}">${fmtPct(d.netMargin)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderAll(){ renderStatement(); renderKpis(); renderCharts(); renderTable(); }
+
+/* ============ Period selector ============ */
+document.getElementById('period-select').addEventListener('click', e=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  document.querySelectorAll('#period-select button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  rangeMonths = Math.min(parseInt(btn.dataset.range,10), months.length);
+  renderAll();
+});
+
+/* ============ Methodology tabs ============ */
+document.getElementById('method-tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  document.querySelectorAll('#method-tabs button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.method-pane').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('pane-'+btn.dataset.pane).classList.add('active');
+});
+
+/* ============ Modal open/close + source tabs ============ */
+const overlay = document.getElementById('overlay');
+document.getElementById('open-modal-btn').addEventListener('click', ()=>overlay.classList.add('open'));
+document.getElementById('close-modal').addEventListener('click', ()=>overlay.classList.remove('open'));
+overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.classList.remove('open'); });
+
+document.getElementById('src-tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  document.querySelectorAll('#src-tabs button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.src-pane').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('src-'+btn.dataset.src).classList.add('active');
+});
+
+function showMsg(elId, text, ok){
+  const el = document.getElementById(elId);
+  el.textContent = text;
+  el.className = 'msg show ' + (ok?'ok':'err');
+}
+
+/* ============ File upload (CSV / Excel / Power BI export) ============ */
+const fileInput = document.getElementById('file-input');
+const dropZone = document.getElementById('drop-zone');
+const fileChip = document.getElementById('file-chip');
+
+['dragenter','dragover'].forEach(evt=>{
+  dropZone.addEventListener(evt, e=>{ e.preventDefault(); dropZone.classList.add('dragover'); });
+});
+['dragleave','dragend'].forEach(evt=>{
+  dropZone.addEventListener(evt, e=>{ e.preventDefault(); dropZone.classList.remove('dragover'); });
+});
+dropZone.addEventListener('drop', e=>{
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+
+document.getElementById('fc-remove').addEventListener('click', e=>{
+  e.preventDefault();
+  fileInput.value = '';
+  fileChip.classList.remove('show');
+  document.getElementById('file-msg').classList.remove('show');
+});
+
+function formatBytes(bytes){
+  if(bytes < 1024) return bytes + ' B';
+  if(bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+async function handleFile(file){
+  document.getElementById('fc-name').textContent = file.name;
+  document.getElementById('fc-meta').textContent = formatBytes(file.size);
+  fileChip.classList.add('show');
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+    const records = rowsToRecords(rows);
+    const ds = buildDataset(records);
+    loadDataset(ds, file.name, 'file');
+    showMsg('file-msg', `Loaded ${records.length} rows across ${ds.months.length} periods.`, true);
+    setTimeout(()=>overlay.classList.remove('open'), 700);
+  }catch(err){
+    showMsg('file-msg', err.message, false);
+  }
+}
+
+document.getElementById('download-template').addEventListener('click', ()=>{
+  const csv = [
+    'Month,Stream,Type,Amount',
+    'Jan-26,Subscriptions,Revenue,150000',
+    'Jan-26,Services,Revenue,60000',
+    'Jan-26,Hardware,Revenue,35000',
+    'Jan-26,COGS,Expense,70000',
+    'Jan-26,Payroll,Expense,90000',
+    'Jan-26,Marketing,Expense,28000',
+    'Jan-26,R&D,Expense,22000',
+    'Jan-26,G&A,Expense,16000'
+  ].join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'financial-dashboard-template.csv';
+  a.click();
+});
+
+/* ============ Live API (SQL backend) ============ */
+document.getElementById('connect-api-btn').addEventListener('click', async ()=>{
+  const url = document.getElementById('api-url').value.trim();
+  if(!url){ showMsg('api-msg','Enter an endpoint URL first.', false); return; }
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Endpoint responded with status '+res.status);
+    const rows = await res.json();
+    const records = rowsToRecords(rows);
+    const ds = buildDataset(records);
+    loadDataset(ds, new URL(url).host, 'api');
+    showMsg('api-msg', `Connected. Loaded ${records.length} rows across ${ds.months.length} periods.`, true);
+    setTimeout(()=>overlay.classList.remove('open'), 700);
+  }catch(err){
+    showMsg('api-msg', "Couldn't load data from that endpoint (" + err.message + "). Check CORS is enabled on the backend and the response matches the schema above.", false);
+  }
+});
+
+/* ============ Theme toggle ============ */
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  try{ localStorage.setItem('ledger-theme', theme); }catch(e){}
+  document.getElementById('theme-toggle').textContent = theme==='light' ? '🌙 Dark' : '☀️ Light';
+  if(months.length) renderCharts(); // refresh chart colors for the new theme
+}
+document.getElementById('theme-toggle').addEventListener('click', ()=>{
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current==='dark' ? 'light' : 'dark');
+});
+
+/* ============ Init with demo data ============ */
+loadDataset(buildDataset(demoRecords()), 'Demo data', 'demo');
+document.querySelector('#period-select button[data-range="12"]').classList.add('active');
+let savedTheme = 'dark';
+try{ savedTheme = localStorage.getItem('ledger-theme') || 'dark'; }catch(e){}
+applyTheme(savedTheme);
+</script>
+</body>
+</html>
